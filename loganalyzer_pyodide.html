@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdgeTX GPS Log Visualizer</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.28.0/full/pyodide.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 1.1em;
+        }
+        
+        .upload-section {
+            border: 3px dashed #3498db;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-section:hover {
+            border-color: #2980b9;
+            background: #e8f4f8;
+        }
+        
+        .upload-section.dragover {
+            border-color: #27ae60;
+            background: #e8f5e8;
+        }
+        
+        .file-input {
+            margin: 20px 0;
+        }
+        
+        .file-input input[type="file"] {
+            display: none;
+        }
+        
+        .file-input label {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: all 0.3s ease;
+            display: inline-block;
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+        }
+        
+        .file-input label:hover {
+            background: linear-gradient(45deg, #2980b9, #3498db);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(52, 152, 219, 0.4);
+        }
+        
+        .process-btn {
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(46, 204, 113, 0.3);
+        }
+        
+        .process-btn:hover {
+            background: linear-gradient(45deg, #2ecc71, #27ae60);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(46, 204, 113, 0.4);
+        }
+        
+        .process-btn:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .results-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .download-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        
+        .download-btn {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 20px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 1em;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+        }
+        
+        .download-btn:hover {
+            background: linear-gradient(45deg, #c0392b, #e74c3c);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(231, 76, 60, 0.4);
+        }
+        
+        .map-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .map-container iframe {
+            width: 100%;
+            height: 600px;
+            border: none;
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .file-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e8f4f8;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>EdgeTX Telemetry GPS Data Visualizer</h1>
+            <p class="subtitle">Generate Interactive Maps from EdgeTX Telemetry Data</p>
+        </div>
+        
+        <div class="upload-section" id="uploadSection">
+            <h3>📁 Upload Your EdgeTX CSV File</h3>
+            <p>Drag and drop your CSV file here or click to browse</p>
+            <div class="file-input">
+                <label for="csvFile">Choose CSV File</label>
+                <input type="file" id="csvFile" accept=".csv" />
+            </div>
+            <div id="fileInfo" class="file-info" style="display: none;"></div>
+        </div>
+        
+        <div style="text-align: center;">
+            <button id="processBtn" class="process-btn" disabled>
+                🗺️ Generate Interactive Map
+            </button>
+        </div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div id="results" class="results-section" style="display: none;">
+            <h3>📊 Results</h3>
+            <div class="download-buttons">
+                <button id="downloadMap" class="download-btn">📥 Download Map HTML</button>
+                <!-- <button id="downloadData" class="download-btn">📥 Download Processed Data</button> -->
+            </div>
+            <div id="mapContainer" class="map-container"></div>
+        </div>
+    </div>
+
+    <script>
+        let pyodide = null;
+        let uploadedFile = null;
+        let mapHtml = null;
+        let processedData = null;
+        
+        // Initialize Pyodide
+        async function initializePyodide() {
+            try {
+                showStatus('Initializing Python environment...', 'loading');
+                pyodide = await loadPyodide();
+                
+                // Install required packages
+                await pyodide.loadPackage(['pandas', 'numpy']);
+				
+				// loading Analyzer Module
+				await pyodide.runPythonAsync(`
+					from pyodide.http import pyfetch
+					response = await pyfetch("loganalyzer.py")
+					with open("loganalyzer.py", "wb") as f:
+						f.write(await response.bytes())
+				`)
+				pyodide.pyimport("loganalyzer");
+                
+                // You'll need to upload your loganalyzer module here
+                // This is a placeholder - replace with your actual module code
+                pyodide.runPython(`
+                    import loganalyzer
+
+
+                    # Make the function available globally
+                    globals()['create_interactive_map'] = loganalyzer.create_interactive_map
+                `);
+                
+                showStatus('Python environment ready!', 'success');
+                setTimeout(() => hideStatus(), 2000);
+            } catch (error) {
+                showStatus(`Error initializing Python: ${error.message}`, 'error');
+                console.error('Pyodide initialization error:', error);
+            }
+        }
+        
+        // File upload handlers
+        const uploadSection = document.getElementById('uploadSection');
+        const fileInput = document.getElementById('csvFile');
+        const fileInfo = document.getElementById('fileInfo');
+        const processBtn = document.getElementById('processBtn');
+        
+        // Drag and drop handlers
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        });
+        
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.classList.remove('dragover');
+        });
+        
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileUpload(files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+        
+        function handleFileUpload(file) {
+            if (!file.name.toLowerCase().endsWith('.csv')) {
+                showStatus('Please upload a CSV file', 'error');
+                return;
+            }
+            
+            uploadedFile = file;
+            fileInfo.innerHTML = `
+                <strong>File selected:</strong> ${file.name}<br>
+                <strong>Size:</strong> ${(file.size / 1024).toFixed(2)} KB<br>
+                <strong>Type:</strong> ${file.type || 'text/csv'}
+            `;
+            fileInfo.style.display = 'block';
+            processBtn.disabled = false;
+        }
+        
+        // Process button handler
+        processBtn.addEventListener('click', async () => {
+            if (!uploadedFile || !pyodide) {
+                showStatus('Please upload a file and wait for Python to initialize', 'error');
+                return;
+            }
+            
+            try {
+                showStatus('Processing your data...', 'loading');
+                processBtn.disabled = true;
+                
+                // Read the CSV file
+                const fileContent = await uploadedFile.text();
+                
+                // Create a temporary file in Pyodide's file system
+                pyodide.FS.writeFile('/tmp/uploaded.csv', fileContent);
+                
+                // Run the analysis
+                const result = pyodide.runPython(`
+import io
+result = create_interactive_map('/tmp/uploaded.csv')
+map_html, data = result
+{'map_html': map_html, 'data': data}
+                `);
+                
+                mapHtml = result.map_html;
+                processedData = result.data;
+                
+                // Display results
+                displayResults();
+                showStatus('Map generated successfully!', 'success');
+                
+            } catch (error) {
+                showStatus(`Error processing file: ${error.message}`, 'error');
+                console.error('Processing error:', error);
+            } finally {
+                processBtn.disabled = false;
+            }
+        });
+        
+        function displayResults() {
+            const resultsSection = document.getElementById('results');
+            const mapContainer = document.getElementById('mapContainer');
+            
+            // Create iframe to display the map
+            const iframe = document.createElement('iframe');
+            iframe.srcdoc = mapHtml;
+            iframe.style.width = '100%';
+            iframe.style.height = '600px';
+            iframe.style.border = 'none';
+            
+            mapContainer.innerHTML = '';
+            mapContainer.appendChild(iframe);
+            
+            resultsSection.style.display = 'block';
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Download handlers
+        document.getElementById('downloadMap').addEventListener('click', () => {
+            if (mapHtml) {
+                downloadFile(mapHtml, uploadedFile.name.replace(/\.[^/.]+$/, '') + '_flight_map.html', 'text/html');
+            }
+        });
+        
+        // document.getElementById('downloadData').addEventListener('click', () => {
+        //     if (processedData) {
+        //         const jsonData = JSON.stringify(processedData, null, 2);
+        //         downloadFile(jsonData, 'processed_data.json', 'application/json');
+        //     }
+        // });
+        
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        // Status display functions
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.className = `status ${type}`;
+            status.innerHTML = type === 'loading' ? 
+                `<div class="loading-spinner"></div>${message}` : 
+                message;
+            status.style.display = 'block';
+        }
+        
+        function hideStatus() {
+            document.getElementById('status').style.display = 'none';
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', initializePyodide);
+    </script>
+</body>
+</html>
