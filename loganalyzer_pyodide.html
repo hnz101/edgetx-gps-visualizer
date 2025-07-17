@@ -211,6 +211,31 @@
             border-radius: 5px;
             font-size: 0.9em;
         }
+
+        .footnote {
+            font-size: 14px;
+            color: #6c757d;
+            text-align: center;
+            border-top: 1px solid #dee2e6;
+            padding-top: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .footnote a {
+            color: #495057;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .footnote a:hover {
+            color: #007bff;
+        }
+
+        .heart {
+            color: #dc3545;
+            margin: 0 2px;
+        }
     </style>
 </head>
 <body>
@@ -246,7 +271,11 @@
             </div>
             <div id="mapContainer" class="map-container"></div>
         </div>
+        <div class="footnote">
+            Made with <span class="heart">♥</span> • <a href="https://github.com/hnz101/edgetx-gps-visualizer" target="_blank" rel="noopener noreferrer">View source on GitHub</a>
+        </div>
     </div>
+
 
     <script>
         let pyodide = null;
@@ -356,10 +385,10 @@
                 
                 // Run the analysis
                 const result = pyodide.runPython(`
-import io
-result = create_interactive_map('/tmp/uploaded.csv')
-map_html, data = result
-{'map_html': map_html, 'data': data}
+                    import io
+                    result = create_interactive_map('/tmp/uploaded.csv')
+                    map_html, data = result
+                    {'map_html': map_html, 'data': data}
                 `);
                 
                 mapHtml = result.map_html;
