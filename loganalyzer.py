@@ -66,6 +66,22 @@ def find_column(df, possible_names):
             return matches[0]
     return None
 
+def haversine(lat1, lon1, lat2, lon2):
+    """
+    Calculate the great-circle distance between two points
+    on the earth (specified in decimal degrees) in kilometers.
+    """
+    R = 6378  # Radius of Earth in kilometers
+    lat1_rad, lon1_rad, lat2_rad, lon2_rad = map(np.radians, [lat1, lon1, lat2, lon2])
+
+    dlon = lon2_rad - lon1_rad
+    dlat = lat2_rad - lat1_rad
+
+    a = np.sin(dlat / 2)**2 + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon / 2)**2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    distance = R * c
+    return distance
+
 def create_interactive_map(file_path, height_offset_threshold=50):
     """
     Reads flight data from a CSV, processes it, and creates an interactive map
@@ -98,6 +114,36 @@ def create_interactive_map(file_path, height_offset_threshold=50):
     if df.empty:
         raise ValueError("No valid GPS data found after processing.")
 
+    # --- Calculation for Info Box ---
+    total_distance_km = 0
+    average_speed_kmh = 0
+    
+    if len(df) > 1:
+        # Vectorized haversine calculation for total distance
+        lats = df['latitude'].to_numpy()
+        lons = df['longitude'].to_numpy()
+        distances = haversine(lats[:-1], lons[:-1], lats[1:], lons[1:])
+        total_distance_km = np.sum(distances)
+
+        # Calculate average speed if time data is available
+        time_col = find_column(df, ['Time', 'zeit'])
+        if time_col:
+            df_time_sorted = df.copy()
+            df_time_sorted['datetime'] = pd.to_datetime(df_time_sorted[time_col], errors='coerce')
+            df_time_sorted = df_time_sorted.dropna(subset=['datetime']).sort_values('datetime')
+            
+            if len(df_time_sorted) > 1:
+                duration = df_time_sorted['datetime'].iloc[-1] - df_time_sorted['datetime'].iloc[0]
+                duration_hours = duration.total_seconds() / 3600
+                
+                if duration_hours > 0:
+                    average_speed_kmh = total_distance_km / duration_hours
+
+    info_box_data = {
+        'total_distance': f"{total_distance_km:.2f} km",
+        'average_speed': f"{average_speed_kmh:.2f} km/h" if average_speed_kmh > 0 else "N/A (no time data)"
+    }
+    
     center_lat = df['latitude'].mean()
     center_lon = df['longitude'].mean()
 
@@ -202,6 +248,21 @@ def create_interactive_map(file_path, height_offset_threshold=50):
                 margin-bottom: 5px;
                 text-align: center;
             }}
+            .info-box {{
+                background: rgba(255, 255, 255, 0.8);
+                padding: 10px;
+                border-radius: 5px;
+                box-shadow: 0 0 15px rgba(0,0,0,0.2);
+                margin-top: 10px;
+            }}
+            .info-box h4 {{
+                margin: 0 0 5px 0;
+                text-align: center;
+            }}
+            .info-box p {{
+                margin: 5px 0;
+                font-size: 14px;
+            }}
         </style>
     </head>
     <body>
@@ -230,6 +291,7 @@ def create_interactive_map(file_path, height_offset_threshold=50):
         var layersData = {json.dumps(layers_data, indent=4, cls=NumpyEncoder)};
         var startMarkerCoords = {json.dumps(start_marker, cls=NumpyEncoder)};
         var endMarkerCoords = {json.dumps(end_marker, cls=NumpyEncoder)};
+        var infoBoxData = {json.dumps(info_box_data, cls=NumpyEncoder)};
 
         var overlayMaps = {{}};
         var titleToKeyMap = {{}};
@@ -256,6 +318,20 @@ def create_interactive_map(file_path, height_offset_threshold=50):
         if(initialLayerTitle && overlayMaps[initialLayerTitle]) {{
             overlayMaps[initialLayerTitle].addTo(map);
         }}
+
+        // --- Info Box Control ---
+        var infoBox = L.control({{position: 'topright'}});
+        infoBox.onAdd = function (map) {{
+            this._div = L.DomUtil.create('div', 'info-box');
+            this.update();
+            return this._div;
+        }};
+        infoBox.update = function () {{
+            this._div.innerHTML = '<h4>Flight Summary</h4>' +
+                '<p><strong>Total Distance:</strong> ' + (infoBoxData.total_distance || 'N/A') + '</p>' +
+                '<p><strong>Average Speed:</strong> ' + (infoBoxData.average_speed || 'N/A') + '</p>';
+        }};
+        infoBox.addTo(map);
 
         // --- Layer Control ---
         L.control.layers(baseMaps, overlayMaps, {{collapsed: false}}).addTo(map);
@@ -321,7 +397,7 @@ def create_interactive_map(file_path, height_offset_threshold=50):
     # Save the generated HTML to a file
     output_file = f'flight_map_{datetime.now().strftime("%Y%m%d_%H%M%S")}.html'
     #with open(output_file, 'w', encoding='utf-8') as f:
-    #    f.write(html_template)
+    #   f.write(html_template)
     #print(f"Map has been saved as: {output_file}")
     
     return html_template, df
